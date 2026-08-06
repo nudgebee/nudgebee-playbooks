@@ -1,0 +1,158 @@
+---
+# WF-003 | Restart (orchestrator)
+#
+# catalogue lookup -> Slack approval -> platform switch -> plugin restart
+# -> post-restart diagnose -> AI summary -> Slack notify.
+#
+# Calls: workflows/wf-000-catalogue-lookup.yml,
+#        plugins/{kubernetes,linux,cloud}/restart.yml,
+#        workflows/wf-010-diagnose.yml
+
+name: demo-restart-service
+description: Restart a service on the right platform, with Slack approval
+definition:
+  tasks:
+  - id: catalogue
+    type: core.call-workflow
+    layout:
+      x: 400
+      y: 280
+    params:
+      inputs:
+        service_name: '{{ Inputs.service_name }}'
+      workflow_name: demo-catalogue-lookup
+  - id: approval
+    type: core.approval
+    layout:
+      x: 400
+      y: 460
+    params:
+      message: ':arrows_counterclockwise: Approval requested: restart *{{ Inputs.service_name }}* (platform: {{ Tasks.catalogue.output.platform }}, target: {{ Tasks.catalogue.output.target }}). AI-Led Automation demo.'
+      im_channel: '{{ Configs.slack_warroom_channel }}'
+      im_provider: slack
+      approval_type: instant_message
+      approval_options:
+      - approve
+      - reject
+    timeout: 2h
+    depends_on:
+    - catalogue
+  - id: dispatch
+    if: '{{ Tasks.approval.output.status == ''approve'' }}'
+    type: core.switch
+    layout:
+      x: 640
+      y: 640
+    params:
+      cases:
+      - next: call_k8s
+        value: kubernetes
+      - next: call_linux
+        value: linux
+      - next: call_aws
+        value: aws
+      expression: '{{ Tasks.catalogue.output.platform }}'
+    depends_on:
+    - approval
+  - id: call_k8s
+    type: core.call-workflow
+    layout:
+      x: -140
+      y: 880
+    params:
+      inputs:
+        namespace: '{{ Tasks.catalogue.output.namespace }}'
+        service_name: '{{ Tasks.catalogue.output.target }}'
+      workflow_name: demo-restart-k8s
+  - id: call_linux
+    type: core.call-workflow
+    layout:
+      x: 580
+      y: 880
+    params:
+      inputs:
+        service_name: '{{ Tasks.catalogue.output.target }}'
+        integration_id: '{{ Tasks.catalogue.output.integration_id }}'
+      workflow_name: demo-restart-linux
+  - id: call_aws
+    type: core.call-workflow
+    layout:
+      x: 940
+      y: 880
+    params:
+      inputs:
+        region: '{{ Tasks.catalogue.output.region }}'
+        aws_account: '{{ Tasks.catalogue.output.aws_account }}'
+        service_name: '{{ Tasks.catalogue.output.target }}'
+      workflow_name: demo-restart-aws
+  - id: post_check
+    type: core.call-workflow
+    layout:
+      x: 209
+      y: 1095
+    params:
+      inputs:
+        service_name: '{{ Inputs.service_name }}'
+      workflow_name: demo-diagnose-service
+    timeout: 10m
+    depends_on:
+    - call_k8s
+    - call_linux
+    - call_aws
+  - id: ai_summary
+    type: llm.summary
+    layout:
+      x: 741
+      y: 1200
+    params:
+      message: 'Summarize this restart operation for an operator in 2-3 plain sentences: service ''{{ Inputs.service_name }}'' on platform {{ Tasks.catalogue.output.platform }}. Restart result (K8s, empty if unused): {{ Tasks.call_k8s.output }}. Restart result (Linux, empty if unused): {{ Tasks.call_linux.output }}. Restart result (AWS, empty if unused): {{ Tasks.call_aws.output }}. Post-restart diagnosis: {{ Tasks.post_check.output.answer }}. State clearly whether the service is healthy now.'
+    timeout: 5m
+    depends_on:
+    - post_check
+  - id: notify
+    type: notifications.im
+    layout:
+      x: 342
+      y: 1395
+    params:
+      channel: '{{ Configs.slack_warroom_channel }}'
+      message: |-
+        :white_check_mark: Restart of *{{ Inputs.service_name }}* finished (approved by {{ Tasks.approval.output.approver }}).
+        {{ Tasks.ai_summary.output.data }}
+      provider: slack
+    depends_on:
+    - ai_summary
+  - id: notify_rejected
+    if: '{{ Tasks.approval.output.status != ''approve'' }}'
+    type: notifications.im
+    layout:
+      x: 160
+      y: 640
+    params:
+      channel: '{{ Configs.slack_warroom_channel }}'
+      message: ':no_entry: Restart of *{{ Inputs.service_name }}* was rejected. No changes made.'
+      provider: slack
+    depends_on:
+    - approval
+  inputs:
+  - id: service_name
+    type: string
+    description: Service name as listed in the catalogue
+  layout:
+    viewport:
+      x: 313.5
+      y: -530.95
+      zoom: 0.75
+  timeout: 3h
+  version: v1
+  triggers:
+  - type: manual
+    layout:
+      x: 400
+      y: 100
+  retry_policy:
+    initial_interval: 1s
+    maximum_attempts: 3
+    maximum_interval: 1m
+    backoff_coefficient: 2
+  llm_description: Use when a service needs restarting and you do not know which platform it runs on. Looks the service up in the catalogue, asks a human to approve in Slack, then restarts it on the right platform.

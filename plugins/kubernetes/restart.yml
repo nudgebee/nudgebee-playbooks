@@ -1,0 +1,46 @@
+---
+# Kubernetes plugin: restart
+#
+# precheck -> snapshot -> rollout restart -> rollout status
+
+name: demo-restart-k8s
+description: Restart a Kubernetes deployment (rollout restart) with pre-check, snapshot and verify
+definition:
+  tasks:
+  - id: precheck
+    type: cloud.k8s.cli
+    params:
+      command: kubectl get deployment {{ Inputs.service_name }} -n {{ Inputs.namespace }} -o wide
+  - id: snapshot
+    type: cloud.k8s.cli
+    params:
+      command: kubectl get deployment {{ Inputs.service_name }} -n {{ Inputs.namespace }} -o jsonpath='{.spec.replicas} {.spec.template.spec.containers[0].image}'
+    depends_on:
+    - precheck
+  - id: restart
+    type: cloud.k8s.cli
+    params:
+      command: kubectl rollout restart deployment/{{ Inputs.service_name }} -n {{ Inputs.namespace }}
+    depends_on:
+    - snapshot
+  - id: verify
+    type: cloud.k8s.cli
+    params:
+      command: kubectl rollout status deployment/{{ Inputs.service_name }} -n {{ Inputs.namespace }} --timeout=180s
+    timeout: 5m
+    depends_on:
+    - restart
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: Deployment name
+  - id: namespace
+    type: string
+    default: demo
+  output:
+    result: '{{ Tasks.verify.output }}'
+    snapshot_before: '{{ Tasks.snapshot.output }}'
+  version: v1
+  triggers:
+  - type: manual

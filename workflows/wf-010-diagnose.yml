@@ -1,0 +1,75 @@
+---
+# WF-010 | Diagnose (orchestrator)
+#
+# catalogue lookup -> platform switch -> plugin diagnose -> AI interpretation.
+# Read-only: no task in this tree mutates anything.
+#
+# Calls: workflows/wf-000-catalogue-lookup.yml,
+#        plugins/{kubernetes,linux,cloud}/diagnose.yml
+
+name: demo-diagnose-service
+description: Diagnose a service on the right platform and explain the result in plain words
+definition:
+  tasks:
+  - id: catalogue
+    type: core.call-workflow
+    params:
+      inputs:
+        service_name: '{{ Inputs.service_name }}'
+      workflow_name: demo-catalogue-lookup
+  - id: dispatch
+    type: core.switch
+    params:
+      cases:
+      - next: call_k8s
+        value: kubernetes
+      - next: call_linux
+        value: linux
+      - next: call_aws
+        value: aws
+      expression: '{{ Tasks.catalogue.output.platform }}'
+    depends_on:
+    - catalogue
+  - id: call_k8s
+    type: core.call-workflow
+    params:
+      inputs:
+        namespace: '{{ Tasks.catalogue.output.namespace }}'
+        service_name: '{{ Tasks.catalogue.output.target }}'
+      workflow_name: demo-diagnose-k8s
+  - id: call_linux
+    type: core.call-workflow
+    params:
+      inputs:
+        service_name: '{{ Tasks.catalogue.output.target }}'
+        integration_id: '{{ Tasks.catalogue.output.integration_id }}'
+      workflow_name: demo-diagnose-linux
+  - id: call_aws
+    type: core.call-workflow
+    params:
+      inputs:
+        region: '{{ Tasks.catalogue.output.region }}'
+        asg_name: '{{ Tasks.catalogue.output.asg }}'
+        aws_account: '{{ Tasks.catalogue.output.aws_account }}'
+      workflow_name: demo-diagnose-aws
+  - id: interpret
+    type: llm.summary
+    params:
+      message: |-
+        You are an SRE assistant. Based on the diagnostics below for service '{{ Inputs.service_name }}', answer in plain words for an operator: (1) current state, (2) anything wrong or risky, (3) recommended operation (restart / scale / fix-config / none) with a one-line reason. Under 6 sentences, no jargon. Diagnostics:
+        Kubernetes (empty if not used): {{ Tasks.call_k8s.output }}
+        Linux (empty if not used): {{ Tasks.call_linux.output }}
+        AWS (empty if not used): {{ Tasks.call_aws.output }}
+    timeout: 5m
+    depends_on:
+    - dispatch
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: Service name as listed in the catalogue
+  output:
+    answer: '{{ Tasks.interpret.output.data }}'
+  version: v1
+  triggers:
+  - type: manual

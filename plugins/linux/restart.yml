@@ -1,0 +1,43 @@
+---
+# Linux plugin: restart
+#
+# precheck -> systemctl restart -> verify is-active + start timestamp
+
+name: demo-restart-linux
+description: Restart a systemd unit over SSH with pre-check and verify
+definition:
+  tasks:
+  - id: precheck
+    type: integrations.ssh
+    params:
+      command: hostname && (systemctl is-active {{ Inputs.service_name }} || echo not-active)
+      integration_id: '{{ Inputs.integration_id }}'
+  - id: restart
+    type: integrations.ssh
+    params:
+      command: sudo systemctl restart {{ Inputs.service_name }}
+      integration_id: '{{ Inputs.integration_id }}'
+    depends_on:
+    - precheck
+  - id: verify
+    type: integrations.ssh
+    params:
+      command: sleep 3 && systemctl is-active {{ Inputs.service_name }} && systemctl show {{ Inputs.service_name }} -p ExecMainStartTimestamp --no-pager
+      integration_id: '{{ Inputs.integration_id }}'
+    timeout: 3m
+    depends_on:
+    - restart
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: systemd unit name
+  - id: integration_id
+    type: string
+    required: true
+    description: SSH integration id
+  output:
+    result: '{{ Tasks.verify.output }}'
+  version: v1
+  triggers:
+  - type: manual

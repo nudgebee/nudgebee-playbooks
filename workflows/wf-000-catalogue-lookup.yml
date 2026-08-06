@@ -1,0 +1,46 @@
+---
+# WF-000 | Catalogue lookup (shared helper)
+#
+# Resolves service_name -> {platform, target, namespace, region, asg,
+# aws_account, integration_id}. Every orchestrator starts here so that the
+# caller never has to know where a service actually runs.
+#
+# Discovery is dynamic (knowledge_graph_node); catalogues/demo.json holds the
+# static overrides that win over discovery. Keep the two in sync.
+
+name: demo-catalogue-lookup
+description: Resolve a service name to its platform and target via the knowledge graph, with catalogue overrides
+definition:
+  tasks:
+  - id: discover
+    type: dbms.query
+    params:
+      command: SELECT query_attributes->>'name' AS name, node_type, query_attributes->>'namespace' AS namespace, split_part(unique_key, ':', 1) AS provider, split_part(unique_key, ':', 3) AS region, btrim(labels->>'aws:autoscaling:groupName', '[]') AS asg, cloud_account_id::text AS cloud_account FROM knowledge_graph_node WHERE tenant_id = '{{ Configs.tenant_id }}' AND is_active = true AND node_type IN ('Workload','ComputeInstance') AND query_attributes->>'name' = '{{ Inputs.service_name }}' ORDER BY node_type DESC LIMIT 1
+      dbms_type: postgresql
+      integration_id: '{{ Configs.kg_db_integration_id }}'
+    timeout: 2m
+  - id: resolve
+    type: data.transform
+    params:
+      input: '{"discovered": {{ Tasks.discover.output.data }}, "policy": {"billing-service": {"platform": "linux", "integration_id": "{{ Configs.linux_ssh_integration_id }}"}}, "service": "{{ Inputs.service_name }}"}'
+      inputType: json
+      expression: '( $d := discovered[0]; $p := $lookup(policy, service); $plat := $p.platform ? $p.platform : ($d.provider = "k8s" ? "kubernetes" : $d.provider); { "platform": $plat, "target": $d.name ? $d.name : service, "namespace": $d.namespace, "integration_id": $p.integration_id, "asg": $d.asg, "region": $d.region, "aws_account": $d.cloud_account } )'
+      scriptType: jsonata
+    depends_on:
+    - discover
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: Service name
+  output:
+    asg: '{{ Tasks.resolve.output.data.asg }}'
+    region: '{{ Tasks.resolve.output.data.region }}'
+    target: '{{ Tasks.resolve.output.data.target }}'
+    platform: '{{ Tasks.resolve.output.data.platform }}'
+    namespace: '{{ Tasks.resolve.output.data.namespace }}'
+    aws_account: '{{ Tasks.resolve.output.data.aws_account }}'
+    integration_id: '{{ Tasks.resolve.output.data.integration_id }}'
+  version: v1
+  triggers:
+  - type: manual

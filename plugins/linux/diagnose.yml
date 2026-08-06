@@ -1,0 +1,29 @@
+---
+# Linux plugin: diagnose
+#
+# Read-only. systemctl status + last 25 journal lines.
+
+name: demo-diagnose-linux
+description: Collect systemd status and recent journal lines over SSH
+definition:
+  tasks:
+  - id: diag
+    type: integrations.ssh
+    params:
+      command: systemctl status {{ Inputs.service_name }} --no-pager -l && journalctl -u {{ Inputs.service_name }} -n 25 --no-pager
+      integration_id: '{{ Inputs.integration_id }}'
+    timeout: 3m
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: systemd unit name
+  - id: integration_id
+    type: string
+    required: true
+    description: SSH integration id
+  output:
+    result: '{{ Tasks.diag.output }}'
+  version: v1
+  triggers:
+  - type: manual

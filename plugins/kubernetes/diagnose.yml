@@ -1,0 +1,27 @@
+---
+# Kubernetes plugin: diagnose
+#
+# Read-only. Deployment, pods and describe output.
+
+name: demo-diagnose-k8s
+description: Collect Kubernetes deployment and pod diagnostics
+definition:
+  tasks:
+  - id: diag
+    type: cloud.k8s.cli
+    params:
+      command: kubectl get deployment {{ Inputs.service_name }} -n {{ Inputs.namespace }} -o wide && kubectl get pods -n {{ Inputs.namespace }} -l opentelemetry.io/name={{ Inputs.service_name }} && kubectl describe deployment {{ Inputs.service_name }} -n {{ Inputs.namespace }}
+    timeout: 3m
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: Deployment name
+  - id: namespace
+    type: string
+    default: demo
+  output:
+    result: '{{ Tasks.diag.output }}'
+  version: v1
+  triggers:
+  - type: manual

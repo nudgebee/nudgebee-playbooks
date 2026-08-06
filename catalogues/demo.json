@@ -1,0 +1,35 @@
+{
+  "catalogue": "demo",
+  "resolver": "workflows/wf-000-catalogue-lookup.yml",
+  "discovery": {
+    "source": "knowledge_graph_node",
+    "node_types": ["Workload", "ComputeInstance"],
+    "note": "Platform, target, namespace, region, ASG and cloud account are discovered at run time by matching the service name against the knowledge graph. Anything listed under `services` below overrides what discovery returns."
+  },
+  "services": {
+    "billing-service": {
+      "workflows": ["WF-003", "WF-010"],
+      "target": { "type": "application", "name": "billing-service", "platform": "linux" },
+      "parameters": { "integration_id": "{{ Configs.linux_ssh_integration_id }}" },
+      "reason": "Runs as a systemd unit on a VM. Discovery would otherwise resolve it to the Kubernetes workload of the same name."
+    }
+  },
+  "platforms": {
+    "kubernetes": {
+      "restart": "plugins/kubernetes/restart.yml",
+      "diagnose": "plugins/kubernetes/diagnose.yml",
+      "inputs": ["service_name", "namespace"]
+    },
+    "linux": {
+      "restart": "plugins/linux/restart.yml",
+      "diagnose": "plugins/linux/diagnose.yml",
+      "inputs": ["service_name", "integration_id"]
+    },
+    "cloud": {
+      "restart": "plugins/cloud/restart.yml",
+      "diagnose": "plugins/cloud/diagnose.yml",
+      "inputs": ["service_name", "asg_name", "region", "aws_account"],
+      "note": "`aws` is the value the resolver emits for this platform; the plugin directory is named `cloud` to match the source playbook layout."
+    }
+  }
+}

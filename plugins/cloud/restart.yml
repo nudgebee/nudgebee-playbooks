@@ -1,0 +1,47 @@
+---
+# Cloud (AWS) plugin: restart
+#
+# find instances by Name tag -> reboot-instances -> describe-instance-status
+
+name: demo-restart-aws
+description: Reboot the EC2 instances behind a service, matched by Name tag
+definition:
+  tasks:
+  - id: find
+    type: cloud.aws.cli
+    params:
+      command: aws ec2 describe-instances --region {{ Inputs.region }} --filters Name=tag:Name,Values={{ Inputs.service_name }} Name=instance-state-name,Values=running --query "Reservations[].Instances[].InstanceId" --output text
+      account_id: '{{ Inputs.aws_account }}'
+    timeout: 3m
+  - id: restart
+    type: cloud.aws.cli
+    params:
+      command: aws ec2 reboot-instances --region {{ Inputs.region }} --instance-ids {{ Tasks.find.output.data | trim }}
+      account_id: '{{ Inputs.aws_account }}'
+    timeout: 3m
+    depends_on:
+    - find
+  - id: verify
+    type: cloud.aws.cli
+    params:
+      command: aws ec2 describe-instance-status --region {{ Inputs.region }} --instance-ids {{ Tasks.find.output.data | trim }} --include-all-instances --query "InstanceStatuses[].[InstanceId,InstanceState.Name,InstanceStatus.Status]" --output json
+      account_id: '{{ Inputs.aws_account }}'
+    timeout: 3m
+    depends_on:
+    - restart
+  inputs:
+  - id: service_name
+    type: string
+    required: true
+    description: Value of the Name tag
+  - id: region
+    type: string
+    default: us-east-1
+  - id: aws_account
+    type: string
+    required: true
+  output:
+    result: '{{ Tasks.verify.output.data }}'
+  version: v1
+  triggers:
+  - type: manual

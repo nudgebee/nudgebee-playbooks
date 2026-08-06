@@ -1,0 +1,40 @@
+---
+# Cloud (AWS) plugin: diagnose
+#
+# Read-only. ASG capacity/health + last 10 scaling activities.
+
+name: demo-diagnose-aws
+description: Collect Auto Scaling group state and recent scaling activities
+definition:
+  tasks:
+  - id: asg_state
+    type: cloud.aws.cli
+    params:
+      command: aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names {{ Inputs.asg_name }} --region {{ Inputs.region }} --query "AutoScalingGroups[].[AutoScalingGroupName,DesiredCapacity,MinSize,MaxSize,HealthCheckType,HealthCheckGracePeriod,Instances[].[InstanceId,HealthStatus,LifecycleState]]" --output json
+      account_id: '{{ Inputs.aws_account }}'
+    timeout: 3m
+  - id: activities
+    type: cloud.aws.cli
+    params:
+      command: aws autoscaling describe-scaling-activities --auto-scaling-group-name {{ Inputs.asg_name }} --region {{ Inputs.region }} --max-items 10 --query "Activities[].[StartTime,StatusCode,Cause]" --output json
+      account_id: '{{ Inputs.aws_account }}'
+    timeout: 3m
+    depends_on:
+    - asg_state
+  inputs:
+  - id: asg_name
+    type: string
+    required: true
+  - id: region
+    type: string
+    default: us-east-1
+  - id: aws_account
+    type: string
+    required: true
+  output:
+    result: |-
+      ASG state: {{ Tasks.asg_state.output.data }}
+      Recent scaling activities: {{ Tasks.activities.output.data }}
+  version: v1
+  triggers:
+  - type: manual
