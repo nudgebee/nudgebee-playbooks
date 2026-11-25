@@ -1,0 +1,49 @@
+{
+  "name": "on-cloudwatch-alarm",
+  "description": "Parent: fires on CloudWatch alarms from the listed accounts and hands account, alarm and region to the child.",
+  "tags": {
+    "layer": "parent"
+  },
+  "definition": {
+    "version": "v1",
+    "llm_description": "Parent: fires on CloudWatch alarms from the listed accounts and hands account, alarm and region to the child.",
+    "triggers": [
+      {
+        "type": "event",
+        "params": {
+          "filter": "{{ event.source == \"AWS_CloudWatch_Alarm\" and event.labels.service_name == \"AmazonRDS\" }}",
+          "accounts": [
+            "<ACCOUNT_ID_1>",
+            "<ACCOUNT_ID_2>"
+          ]
+        }
+      }
+    ],
+    "tasks": [
+      {
+        "id": "diagnose",
+        "type": "core.call-workflow",
+        "timeout": "5m",
+        "params": {
+          "workflow_name": "describe-alarm-aws",
+          "inputs": {
+            "account_id": "{{ Inputs.event.cloud_account_id }}",
+            "alarm_name": "{{ Inputs.event.aggregation_key }}",
+            "region": "{{ Inputs.event.labels.aws_region }}"
+          }
+        }
+      },
+      {
+        "id": "report",
+        "type": "core.print",
+        "depends_on": [
+          "diagnose"
+        ],
+        "params": {
+          "message": "Alarm {{ Inputs.event.aggregation_key }} on account {{ Inputs.event.cloud_account_id }}: {{ Tasks.diagnose.output }}"
+        }
+      }
+    ],
+    "timeout": "15m"
+  }
+}
