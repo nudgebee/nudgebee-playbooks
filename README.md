@@ -106,3 +106,32 @@ per service.
   gated on `Tasks.approval.output.status == 'approve'`.
 - Restarts are in-place (`rollout restart`, `systemctl restart`, `reboot-instances`).
   Nothing here deletes, scales or replaces a resource.
+
+## Claude skill: build automations with Claude
+
+`skills/nudgebee-automation/` is a [Claude Code](https://docs.claude.com/en/docs/claude-code)
+skill that designs, builds, tests and debugs Nudgebee automations through the
+Nudgebee API, using the patterns in this repository (parent + reusable children,
+one automation across many accounts, approval before any change).
+
+It reads the live task catalogue, triggers and your real events from the API, reads
+the public docs for feature behaviour and UI steps, and checks every automation
+(validate + trigger match against real events) before saving it.
+
+Install:
+
+```bash
+git clone https://github.com/nudgebee/nudgebee-playbooks
+mkdir -p ~/.claude/skills
+cp -r nudgebee-playbooks/skills/nudgebee-automation ~/.claude/skills/
+```
+
+Create an API token in Nudgebee (avatar menu → **API Tokens** → type **Platform**), then:
+
+```bash
+export NB_API_TOKEN=sk-nb-...
+export NB_URL=https://app.nudgebee.com   # or your own domain
+```
+
+Ask Claude, for example: *"Build a Nudgebee automation that diagnoses EC2 CPU alarms
+across all my AWS accounts and offers a restart with Slack approval."*

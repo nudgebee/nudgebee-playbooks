@@ -1,0 +1,48 @@
+{
+  "name": "describe-alarm-aws",
+  "description": "Read-only child: current state and reason of one CloudWatch alarm, on any account passed in.",
+  "tags": {
+    "layer": "child"
+  },
+  "definition": {
+    "version": "v1",
+    "llm_description": "Read-only child: current state and reason of one CloudWatch alarm, on any account passed in.",
+    "triggers": [
+      {
+        "type": "manual"
+      }
+    ],
+    "inputs": [
+      {
+        "id": "account_id",
+        "type": "string",
+        "required": true
+      },
+      {
+        "id": "alarm_name",
+        "type": "string",
+        "required": true
+      },
+      {
+        "id": "region",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "tasks": [
+      {
+        "id": "describe",
+        "type": "cloud.aws.cli",
+        "timeout": "2m",
+        "params": {
+          "account_id": "{{ Inputs.account_id }}",
+          "command": "aws cloudwatch describe-alarms --alarm-names {{ Inputs.alarm_name }} --region {{ Inputs.region }} --query \"MetricAlarms[].[AlarmName,StateValue,StateReason]\" --output json"
+        }
+      }
+    ],
+    "output": {
+      "alarm": "{{ Tasks.describe.output }}"
+    },
+    "timeout": "10m"
+  }
+}
