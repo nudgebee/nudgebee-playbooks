@@ -1,0 +1,11 @@
+{
+  "name": "nudgebee",
+  "owner": { "name": "Nudgebee" },
+  "plugins": [
+    {
+      "name": "nudgebee-automation",
+      "source": "./",
+      "description": "Design, build, test and debug Nudgebee automations through the Nudgebee API."
+    }
+  ]
+}
