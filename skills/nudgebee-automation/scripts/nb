@@ -1,43 +1,98 @@
 #!/usr/bin/env bash
 # nb — call one Nudgebee API action.
 #
-#   nb <action> ['<params json>']        params default to {}
+#   nb login                             save your Nudgebee URL and API token (asked, not echoed)
+#   nb logout                            delete the saved credentials
+#   nb <action> ['<params json>']        call an action; params default to {}
 #   nb <action> @file.json               params read from a file
 #
-# Env: NB_API_TOKEN (required), NB_URL (default https://app.nudgebee.com).
-# Prints the JSON response. Exits non-zero on HTTP errors.
+# Credentials: NB_API_TOKEN / NB_URL from the environment if set, otherwise the file
+# written by `nb login` (~/.config/nudgebee/credentials, readable only by you).
+# NB_URL defaults to https://app.nudgebee.com. Exits non-zero on HTTP errors.
 set -euo pipefail
 
+cred_file="${NB_CREDENTIALS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/nudgebee/credentials}"
+
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+
+load_credentials() {
+  [[ -n "${NB_API_TOKEN:-}" ]] && return 0
+  [[ -f "$cred_file" ]] || return 0
+  local perms
+  perms="$(stat -f '%Lp' "$cred_file" 2>/dev/null || stat -c '%a' "$cred_file")"
+  if [[ "$perms" != "600" && "$perms" != "400" ]]; then
+    echo "nb: $cred_file is readable by others (mode $perms); run: chmod 600 \"$cred_file\"" >&2
+    exit 2
+  fi
+  local key value
+  while IFS='=' read -r key value; do
+    case "$key" in
+      NB_API_TOKEN) NB_API_TOKEN="$value" ;;
+      NB_URL) [[ -n "${NB_URL:-}" ]] || NB_URL="$value" ;;
+    esac
+  done <"$cred_file"
+}
+
+call() {
+  local action="$1" params="${2:-}"
+  if [[ -z "$params" ]]; then
+    params='{}'
+  elif [[ "$params" == @* ]]; then
+    params="$(cat "${params#@}")"
+  fi
+  if [[ ! "$action" =~ ^[a-z0-9_]+$ ]]; then
+    echo "nb: action must be lowercase letters, digits and underscores" >&2
+    exit 2
+  fi
+  if [[ -z "${NB_API_TOKEN:-}" ]]; then
+    echo "nb: no API token. Run 'nb login' in a terminal, or set NB_API_TOKEN." >&2
+    exit 2
+  fi
+  local url="${NB_URL:-https://app.nudgebee.com}"
+  url="${url%/}/api/rpc"
+  local body="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$action\",\"params\":$params}"
+  local resp code
+  resp="$(mktemp)"
+  code="$(curl -sS -o "$resp" -w '%{http_code}' "$url" \
+    -H 'content-type: application/json' \
+    -H @- --data-binary "$body" <<<"Authorization: Bearer $NB_API_TOKEN")" || code=000
+  cat "$resp"
+  echo
+  rm -f "$resp"
+  if [[ "$code" -ge 400 || "$code" == 000 ]]; then
+    echo "nb: HTTP $code from $action" >&2
+    return 1
+  fi
+}
+
+login() {
+  local url token
+  read -r -p "Nudgebee URL [https://app.nudgebee.com]: " url
+  url="${url:-https://app.nudgebee.com}"
+  url="${url%/}"
+  read -r -s -p "API token (sk-nb-..., not shown): " token
+  echo
+  if [[ "$token" != sk-nb-* ]]; then
+    echo "nb: that doesn't look like a Nudgebee API token (it starts with sk-nb-)" >&2
+    exit 2
+  fi
+  NB_URL="$url" NB_API_TOKEN="$token" call accounts_list '{"limit":1}' >/dev/null || {
+    echo "nb: the token was refused by $url — nothing saved" >&2
+    exit 1
+  }
+  mkdir -p "$(dirname "$cred_file")"
+  (umask 077 && printf 'NB_URL=%s\nNB_API_TOKEN=%s\n' "$url" "$token" >"$cred_file")
+  chmod 600 "$cred_file"
+  echo "Saved to $cred_file (only you can read it). Claude can now use the Nudgebee API."
+}
+
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
-  exit 2
-fi
-: "${NB_API_TOKEN:?set NB_API_TOKEN to your Nudgebee API token}"
-url="${NB_URL:-https://app.nudgebee.com}"
-url="${url%/}/api/rpc"
-
-action="$1"
-params="${2:-}"
-if [[ -z "$params" ]]; then
-  params='{}'
-elif [[ "$params" == @* ]]; then
-  params="$(cat "${params#@}")"
-fi
-if [[ ! "$action" =~ ^[a-z0-9_]+$ ]]; then
-  echo "nb: action must be lowercase letters, digits and underscores" >&2
+  usage
   exit 2
 fi
 
-body="{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"$action\",\"params\":$params}"
-resp="$(mktemp)"
-trap 'rm -f "$resp"' EXIT
-code="$(curl -sS -o "$resp" -w '%{http_code}' "$url" \
-  -H 'content-type: application/json' \
-  -H "Authorization: Bearer $NB_API_TOKEN" \
-  --data-binary @- <<<"$body")"
-cat "$resp"
-echo
-if [[ "$code" -ge 400 ]]; then
-  echo "nb: HTTP $code from $action" >&2
-  exit 1
-fi
+case "$1" in
+  login) login ;;
+  logout) rm -f "$cred_file" && echo "Removed $cred_file" ;;
+  *) load_credentials; call "$@" ;;
+esac

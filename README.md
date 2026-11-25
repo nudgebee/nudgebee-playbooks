@@ -124,6 +124,13 @@ Install in Claude Code (one command):
 /plugin install nudgebee-automation --marketplace nudgebee/nudgebee-playbooks
 ```
 
+In the VS Code / JetBrains extension, where `/plugin` isn't available, run it from a
+terminal instead (then start a new Claude conversation):
+
+```bash
+claude plugin install nudgebee-automation --marketplace nudgebee/nudgebee-playbooks
+```
+
 On older Claude Code versions: `/plugin marketplace add nudgebee/nudgebee-playbooks`,
 then `/plugin install nudgebee-automation@nudgebee`. Without plugins, copy the folder
 instead:
@@ -134,12 +141,18 @@ mkdir -p ~/.claude/skills
 cp -r nudgebee-playbooks/skills/nudgebee-automation ~/.claude/skills/
 ```
 
-Create an API token in Nudgebee (avatar menu → **API Tokens** → type **Platform**), then:
+Create an API token in Nudgebee (avatar menu → **API Tokens** → type **Platform**),
+then save it once from a terminal. `nb login` asks for your Nudgebee URL and the token
+(not shown on screen), checks it, and stores both in `~/.config/nudgebee/credentials`,
+readable only by you:
 
 ```bash
-export NB_API_TOKEN=sk-nb-...
-export NB_URL=https://app.nudgebee.com   # or your own domain
+~/.claude/plugins/marketplaces/nudgebee/skills/nudgebee-automation/scripts/nb login
+# copied the folder instead? ~/.claude/skills/nudgebee-automation/scripts/nb login
 ```
+
+Don't paste the token into a Claude chat. `nb logout` removes it. Environment
+variables `NB_API_TOKEN` and `NB_URL` also work and take precedence over the file.
 
 Ask Claude, for example: *"Build a Nudgebee automation that diagnoses EC2 CPU alarms
 across all my AWS accounts and offers a restart with Slack approval."*

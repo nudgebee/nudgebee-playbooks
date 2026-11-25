@@ -13,17 +13,27 @@ want if it is not clear; default to building through the API when a token is set
 ## 0. Setup
 
 The user needs a Nudgebee API token (avatar menu → **API Tokens** → Create, type
-**Platform**). Check once per session:
+**Platform**; an expiry and access limited to the modules they need are safer).
+`scripts/nb` is in this skill's folder — use its absolute path. Check once per
+session:
 
 ```bash
-export NB_URL=${NB_URL:-https://app.nudgebee.com}   # self-hosted: their own domain
-export NB_API_TOKEN=sk-nb-...                        # never echo, log or commit it
-scripts/nb accounts_list '{"limit":5}'
+<skill folder>/scripts/nb accounts_list '{"limit":5}'
 ```
 
-`scripts/nb` is relative to this skill's folder. If the call fails, see
-`references/api.md` → "Errors". Without a token you can still design and give UI
-steps; say that nothing was checked against their tenant.
+If it says there is no token, ask the user to run this **themselves in a terminal**
+(it asks for the URL and the token without showing it, checks the token, and saves
+both to `~/.config/nudgebee/credentials`, readable only by them):
+
+```bash
+<skill folder>/scripts/nb login
+```
+
+Never ask the user to paste the token into the chat, and never print, log or
+commit it. Setting `NB_API_TOKEN` / `NB_URL` in the environment also works and
+takes precedence. If a call fails, see `references/api.md` → "Errors". Without a
+token you can still design and give UI steps; say that nothing was checked against
+their tenant.
 
 ## 1. Where facts come from — in this order
 
