@@ -124,6 +124,13 @@ Install in Claude Code (one command):
 /plugin install nudgebee-automation --marketplace nudgebee/nudgebee-playbooks
 ```
 
+In the VS Code / JetBrains extension, where `/plugin` isn't available, run it from a
+terminal instead (then start a new Claude conversation):
+
+```bash
+claude plugin install nudgebee-automation --marketplace nudgebee/nudgebee-playbooks
+```
+
 On older Claude Code versions: `/plugin marketplace add nudgebee/nudgebee-playbooks`,
 then `/plugin install nudgebee-automation@nudgebee`. Without plugins, copy the folder
 instead:
