@@ -118,7 +118,15 @@ It reads the live task catalogue, triggers and your real events from the API, re
 the public docs for feature behaviour and UI steps, and checks every automation
 (validate + trigger match against real events) before saving it.
 
-Install:
+Install in Claude Code (one command):
+
+```
+/plugin install nudgebee-automation --marketplace nudgebee/nudgebee-playbooks
+```
+
+On older Claude Code versions: `/plugin marketplace add nudgebee/nudgebee-playbooks`,
+then `/plugin install nudgebee-automation@nudgebee`. Without plugins, copy the folder
+instead:
 
 ```bash
 git clone https://github.com/nudgebee/nudgebee-playbooks
